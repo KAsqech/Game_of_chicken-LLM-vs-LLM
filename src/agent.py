@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import random
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, Literal, Optional
 
+from google.genai.errors import ClientError
 from dotenv import load_dotenv
-from openai import OpenAI
+from google import genai
 
 Action = Literal["ESCALATE", "YIELD"]
 
@@ -21,7 +23,7 @@ MBTI_TYPES = [
 
 def get_api_key() -> Optional[str]:
     load_dotenv()
-    return os.getenv("OPENAI_API_KEY")
+    return os.getenv("GEMINI_API_KEY")
 
 
 def _parse_action(text: str) -> Optional[Action]:
@@ -83,34 +85,50 @@ class Agent:
         opponent_mbti = context.get("opponent_mbti", "UNKNOWN")
         round_name = context.get("round", "UNKNOWN")
 
-        # LLM mode
         if self.use_llm:
             api_key = get_api_key()
             if not api_key:
                 raise RuntimeError(
-                    "OPENAI_API_KEY not set. Put it in a .env file or environment variable."
+                    "GEMINI_API_KEY not set. Put it in a .env file or environment variable."
                 )
 
-            client = OpenAI(api_key=api_key)
+            client = genai.Client(api_key=api_key)
 
             prompt = build_prompt(self.mbti, opponent_mbti, round_name)
 
-            resp = client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=self.temperature,
-            )
+            time.sleep(0.4)
+            
+            for attempt in range(3):
+                try:
+                    resp = client.models.generate_content(
+                        model=self.model,
+                        contents=prompt,
+                        config={
+                            "temperature": self.temperature,
+                            "max_output_tokens": 5,
+                        },
+                    )
 
-            raw = (resp.choices[0].message.content or "").strip()
-            action = _parse_action(raw)
+                    raw = (resp.text or "").strip()
+                    action = _parse_action(raw)
 
-            # Safe fallback (never crash tournament due to model formatting)
-            if action is None:
-                # fallback: risk-based
-                risk = float(self.profile.get("risk", 0.5))
-                return "ESCALATE" if rng.random() < risk else "YIELD"
+                    if action:
+                        return action
 
-            return action
+                    break  
+
+                except ClientError as e:
+                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                        wait_time = 2.5 * (attempt + 1)
+                        print(f"[Rate limit] Sleeping {wait_time:.1f}s...")
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        raise
+
+            risk = float(self.profile.get("risk", 0.5))
+            return "ESCALATE" if rng.random() < risk else "YIELD"
+
 
         # Simulated mode
         risk = float(self.profile.get("risk", 0.5))
