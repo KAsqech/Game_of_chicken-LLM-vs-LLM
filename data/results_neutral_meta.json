@@ -1,0 +1,137 @@
+[
+  {
+    "run_id": 0,
+    "seed": 42,
+    "champion": "ISTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 1,
+    "seed": 43,
+    "champion": "ISTJ",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 2,
+    "seed": 44,
+    "champion": "ISTJ",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 3,
+    "seed": 45,
+    "champion": "ISTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 4,
+    "seed": 46,
+    "champion": "ESFP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 5,
+    "seed": 47,
+    "champion": "INTJ",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 6,
+    "seed": 48,
+    "champion": "ESFJ",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 7,
+    "seed": 49,
+    "champion": "ENFP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 8,
+    "seed": 50,
+    "champion": "ENTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 9,
+    "seed": 51,
+    "champion": "INFP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 10,
+    "seed": 52,
+    "champion": "INFJ",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 11,
+    "seed": 53,
+    "champion": "ISTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 12,
+    "seed": 54,
+    "champion": "ESTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 13,
+    "seed": 55,
+    "champion": "ESTP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  },
+  {
+    "run_id": 14,
+    "seed": 56,
+    "champion": "ESFP",
+    "use_llm": false,
+    "model": "models/gemini-2.0-flash-lite",
+    "temperature": 0.7,
+    "mode": "neutral"
+  }
+]

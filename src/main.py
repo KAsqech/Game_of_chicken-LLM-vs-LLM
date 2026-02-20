@@ -1,13 +1,12 @@
 from dotenv import load_dotenv
-from tournament import run_tournament
+from tournament import run_experiment, run_both_conditions
 from analysis import summarize_results
 import os
 
 load_dotenv()
 
 def main():
-    print(run_tournament())
-    summarize_results()
+    print(run_both_conditions())
 
 if __name__ == "__main__":
     main()

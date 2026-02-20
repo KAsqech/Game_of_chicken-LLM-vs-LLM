@@ -1,22 +1,144 @@
 from __future__ import annotations
-from dotenv import load_dotenv
-import os
+
+import json
+from pathlib import Path
 import pandas as pd
 
-def summarize_results(csv_path: str = "data/results.csv") -> None:
-    df = pd.read_csv(csv_path)
 
-    win_counts = df["winner_mbti"].value_counts().rename_axis("mbti").reset_index(name="wins")
-    print("\nWin counts by MBTI:")
+def load_jsonl(path: str) -> pd.DataFrame:
+    records = []
+    with open(path, "r") as f:
+        for line in f:
+            records.append(json.loads(line))
+    return pd.DataFrame(records)
+
+
+def escalation_by_mbti(df: pd.DataFrame) -> pd.DataFrame:
+    a = df[["mbti_a", "action_a"]].rename(columns={"mbti_a": "mbti", "action_a": "action"})
+    b = df[["mbti_b", "action_b"]].rename(columns={"mbti_b": "mbti", "action_b": "action"})
+    long = pd.concat([a, b], ignore_index=True)
+    long["is_escalate"] = (long["action"] == "ESCALATE").astype(int)
+
+    out = (
+        long.groupby("mbti")
+        .agg(n_actions=("action", "count"), n_escalate=("is_escalate", "sum"))
+        .reset_index()
+    )
+    out["escalation_rate"] = out["n_escalate"] / out["n_actions"]
+    return out.sort_values("escalation_rate", ascending=False)
+
+
+def payoff_by_mbti(df: pd.DataFrame) -> pd.DataFrame:
+    a = df[["mbti_a", "payoff_a"]].rename(columns={"mbti_a": "mbti", "payoff_a": "payoff"})
+    b = df[["mbti_b", "payoff_b"]].rename(columns={"mbti_b": "mbti", "payoff_b": "payoff"})
+    long = pd.concat([a, b], ignore_index=True)
+
+    out = (
+        long.groupby("mbti")
+        .agg(
+            n=("payoff", "count"),
+            mean_payoff=("payoff", "mean"),
+            std_payoff=("payoff", "std"),
+            min_payoff=("payoff", "min"),
+            max_payoff=("payoff", "max"),
+        )
+        .reset_index()
+    )
+    return out.sort_values("mean_payoff", ascending=False)
+
+
+def summarize_results(path: str) -> None:
+    p = Path(path)
+    print(f"\nReading: {p.resolve()}")
+    if not p.exists():
+        print(f"ERROR: File not found: {path}")
+        return
+
+    df = load_jsonl(path)
+
+    print("\n==============================")
+    print(f"SUMMARY ({p.name})")
+    print("==============================")
+
+    # Win counts by MBTI (match-level wins)
+    win_counts = df["winner"].value_counts().rename_axis("mbti").reset_index(name="wins")
+    print("\nWin counts by MBTI (match-level wins):")
     print(win_counts.to_string(index=False))
 
-    # Trait-level quick summaries (E/I, T/F, J/P)
-    df["E_I"] = df["winner_mbti"].str[0]
-    df["S_N"] = df["winner_mbti"].str[1]
-    df["T_F"] = df["winner_mbti"].str[2]
-    df["J_P"] = df["winner_mbti"].str[3]
+    # Overall escalation rate (across both sides)
+    total_matches = len(df)
+    esc_a = (df["action_a"] == "ESCALATE").sum()
+    esc_b = (df["action_b"] == "ESCALATE").sum()
+    escalation_rate = (esc_a + esc_b) / (2 * total_matches)
 
-    print("\nWins by trait:")
-    for col in ["E_I", "S_N", "T_F", "J_P"]:
-        counts = df[col].value_counts()
-        print(f"{col}:\n{counts.to_string()}\n")
+    print("\nEscalation rate (overall, across actions):")
+    print(f"{escalation_rate:.3f}")
+
+    # Mutual escalation rate
+    mutual_rate = ((df["action_a"] == "ESCALATE") & (df["action_b"] == "ESCALATE")).mean()
+    print("\nMutual escalation rate (match-level):")
+    print(f"{mutual_rate:.3f}")
+
+    # Champions (final match winner per run)
+    champs = df.sort_values(["run_id", "round"]).groupby("run_id")["winner"].last()
+    print("\nChampion distribution across runs:")
+    print(champs.value_counts().rename("champion_count").to_string())
+
+    # Per-MBTI escalation
+    print("\nPer-MBTI escalation rates (behavioral):")
+    print(escalation_by_mbti(df).to_string(index=False))
+
+    # Per-MBTI payoff summary
+    print("\nPer-MBTI payoff summaries:")
+    print(payoff_by_mbti(df).to_string(index=False))
+
+    print("\nDone.\n")
+
+
+def compare_conditions(
+    mbti_path: str = "data/results_mbti.jsonl",
+    neutral_path: str = "data/results_neutral.jsonl",
+) -> None:
+    if not Path(mbti_path).exists() or not Path(neutral_path).exists():
+        print("\nBaseline comparison skipped (need both files):")
+        print(f"  - {mbti_path}")
+        print(f"  - {neutral_path}")
+        return
+
+    df_m = load_jsonl(mbti_path)
+    df_n = load_jsonl(neutral_path)
+
+    def metrics(df: pd.DataFrame):
+        total_matches = len(df)
+        escalation = ((df["action_a"] == "ESCALATE").sum() + (df["action_b"] == "ESCALATE").sum()) / (2 * total_matches)
+        mutual = ((df["action_a"] == "ESCALATE") & (df["action_b"] == "ESCALATE")).mean()
+        champs = df.sort_values(["run_id", "round"]).groupby("run_id")["winner"].last()
+        return escalation, mutual, champs.value_counts()
+
+    esc_m, mut_m, champ_m = metrics(df_m)
+    esc_n, mut_n, champ_n = metrics(df_n)
+
+    print("\n==============================")
+    print("BASELINE COMPARISON (MBTI vs NEUTRAL)")
+    print("==============================")
+    print(f"MBTI    escalation_rate={esc_m:.3f}   mutual_escalation={mut_m:.3f}")
+    print(f"NEUTRAL escalation_rate={esc_n:.3f}   mutual_escalation={mut_n:.3f}")
+
+    print("\nChampion distribution (MBTI):")
+    print(champ_m.rename("champion_count").to_string())
+
+    print("\nChampion distribution (NEUTRAL):")
+    print(champ_n.rename("champion_count").to_string())
+
+    print("\nDone.\n")
+
+
+if __name__ == "__main__":
+    # Prefer MBTI file if present, else fall back to the single default.
+    if Path("data/results_mbti.jsonl").exists():
+        summarize_results("data/results_mbti.jsonl")
+    elif Path("data/results.jsonl").exists():
+        summarize_results("data/results.jsonl")
+    else:
+        print("No results file found in data/. Run `python src/main.py` first.")
+    compare_conditions()
