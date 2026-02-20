@@ -5,17 +5,17 @@
 
 ## Overview
 
-This project investigates whether fine-tuning LLM agents on MBTI personality-typed text data produces more behaviorally distinct and strategically consistent agents than persona prompting alone. We use Llama 3 8B as a fixed base model and train separate LoRA/QLoRA adapters for each MBTI type, then evaluate agents in classical game-theoretic settings.
+This project investigates whether fine-tuning LLM agents on MBTI personality-typed text data produces more behaviorally distinct and strategically consistent agents than persona prompting alone. We use Llama 3 8B as a fixed base model and train separate LoRA/QLoRA adapters for each MBTI type using [Unsloth](https://github.com/unslothai/unsloth) for fast, memory-efficient fine-tuning, then evaluate agents in classical game-theoretic settings.
 
 ### Research Question
 
 **Does fine-tuning produce more consistent and distinct agent behavior than prompting alone, and does that translate to measurably different strategic outcomes?**
 
-We wanted to go beyond the observation that different prompts produce different outputs. Fine-tuned agents internalize personality traits at the weight level rather than relying on instruction-following, which may produce deeper behavioral consistency, or it may not.
+This goes beyond the trivial observation that different prompts produce different outputs. Fine-tuned agents internalize personality traits at the weight level rather than relying on instruction-following, which may produce deeper behavioral consistency, or it may not
 
 ## AI Components
 
-- **LoRA/QLoRA fine-tuning** — Training separate lightweight adapters for each MBTI type on personality-consistent text data (e.g., Kaggle MBTI dataset, MBTI subreddit posts). This is the core ML training component of the project.
+- **LoRA/QLoRA fine-tuning via Unsloth** — Training separate lightweight adapters for each MBTI type on personality-consistent text data (Kaggle MBTI dataset, MBTI subreddit posts). Unsloth provides 2-5x faster training and ~50% less memory usage compared to vanilla Hugging Face PEFT, making it feasible to train on Google Colab's free T4 tier.
 - **Fine-tuned vs. prompt-only comparison** — Running identical tournaments with fine-tuned agents and prompt-only agents to quantify the difference in behavioral consistency and strategic performance.
 - **Behavioral evaluation pipeline** — Quantitative metrics to assess role-play fidelity, including behavioral consistency scoring, reasoning trace analysis, and baseline controls.
 
@@ -32,7 +32,7 @@ We focus on Chicken as the primary game to keep the fine-tuning workload managea
 
 ### Fine-Tuning Pipeline
 1. **Data collection** — Gather personality-typed text from the Kaggle MBTI dataset (~8,600 users with labeled forum posts) and/or MBTI subreddit posts. Clean and format as instruction-tuning data.
-2. **LoRA adapter training** — For each MBTI type (starting with 4 representative types, expanding to 16 if time allows), fine-tune a separate LoRA adapter on Llama 3 8B using Hugging Face PEFT + QLoRA for memory efficiency.
+2. **LoRA adapter training** — For each MBTI type (starting with 4 representative types — ENTJ, ISFP, ENTP, ISFJ — expanding to 16 if time allows), fine-tune a separate LoRA adapter on Llama 3 8B using Unsloth + QLoRA on Google Colab. Unsloth handles 4-bit quantization, gradient checkpointing, and optimized training loops out of the box.
 3. **Validation** — Verify that fine-tuned adapters produce personality-consistent text outside of the game context before running tournaments.
 
 ### Tournament Design
@@ -70,7 +70,7 @@ src/
 
 fine_tuning/
   prepare_data.py       # Data cleaning and formatting for LoRA training
-  train_lora.py         # LoRA/QLoRA fine-tuning script
+  train_lora.py         # Unsloth fine-tuning script
   validate_adapter.py   # Personality consistency validation for adapters
 
 config/
@@ -98,10 +98,33 @@ cd Game_of_chicken-LLM-vs-LLM
 pip install -r requirements.txt
 
 # Key dependencies:
-#   torch, transformers, peft, bitsandbytes (for QLoRA)
-#   ollama or vllm (for inference)
+#   torch, unsloth, transformers, peft, bitsandbytes
+#   ollama or vllm (for local inference)
 #   pandas, numpy, scipy, matplotlib
 
-# Pull the base model
+# Pull the base model for local inference
 ollama pull llama3:8b
 ```
+
+### Fine-Tuning on Google Colab
+
+Fine-tuning is done on Google Colab (free T4 GPU is sufficient with Unsloth):
+
+```python
+# Cell 1: Install Unsloth
+!pip install unsloth
+
+# Cell 2: Clone repo and prep data
+!git clone https://github.com/<org>/Game_of_chicken-LLM-vs-LLM.git
+%cd Game_of_chicken-LLM-vs-LLM
+
+# Cell 3: Train an adapter
+!python fine_tuning/train_lora.py --mbti_type ENTJ --epochs 3
+
+# Cell 4: Save adapter to Google Drive
+from google.colab import drive
+drive.mount('/content/drive')
+!cp -r outputs/lora_ENTJ /content/drive/MyDrive/adapters/
+```
+
+Adapters are small (~10–50MB) and can be committed to the repo or shared via Google Drive.
