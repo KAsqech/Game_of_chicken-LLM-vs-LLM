@@ -1,3 +1,5 @@
+#Current issue: even the small test case is taking so long to load that it isn't even loading
+
 from __future__ import annotations
 
 import json
@@ -56,11 +58,11 @@ def run(
     #repeats_per_matchup: int,
     #seed: int,                 # master seed
 
-    #testing
-    mbti_types=["ENTJ", "ISFP"],
-    methods=["neutral"],
-    repeats_per_matchup=1,
-    seed=42,
+    #Small LLM case: testing
+    mbti_types: ["ENTJ", "ISFP"],
+    methods: ["neutral"],
+    repeats_per_matchup: 1,
+    seed: 42,
     out_jsonl: Path,
     model_name: str = "llama3:8b",
     temperature: float = 0.7,
