@@ -50,11 +50,17 @@ def generate_matchups(agents: list[Agent]) -> list[tuple[Agent, Agent]]:
     return list(combinations(agents, 2))
 
 def run(
-    *,
-    mbti_types: list[str],
-    methods: list[Method],
-    repeats_per_matchup: int,
-    seed: int,                 # master seed
+    #*,
+    #mbti_types: list[str],
+    #methods: list[Method],
+    #repeats_per_matchup: int,
+    #seed: int,                 # master seed
+
+    #testing
+    mbti_types=["ENTJ", "ISFP"],
+    methods=["neutral"],
+    repeats_per_matchup=1,
+    seed=42,
     out_jsonl: Path,
     model_name: str = "llama3:8b",
     temperature: float = 0.7,
