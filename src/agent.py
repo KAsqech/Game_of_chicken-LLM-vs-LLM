@@ -74,13 +74,16 @@ class Agent:
         # (so each game is reproducible if game_seed is reproducible).
         inference_seed = rng.randrange(2**31)
 
-        raw = self._query_model(
-            model=model_to_use,
-            prompt=prompt,
-            temperature=self.cfg.temperature,
-            max_tokens=self.cfg.max_tokens,
-            seed=inference_seed,
-        )
+        #raw = self._query_model(
+        #    model=model_to_use,
+        #    prompt=prompt,
+        #    temperature=self.cfg.temperature,
+        #    max_tokens=self.cfg.max_tokens,
+        #    seed=inference_seed,
+        #)
+
+        #Testing
+        return "ESCALATE" if rng.random() < 0.5 else "YIELD"
 
         action = self._parse_action(raw)
         if action is None:
