@@ -1,4 +1,25 @@
 # src/utils.py
+
+"""
+utils.py
+
+Shared utilities for the MBTI Game of Chicken project.
+
+Responsibilities:
+- Load and cache the fixed MBTI persona prompt set from prompts/mbti_prompts.json.
+- Provide helper functions to fetch:
+    - the system prompt template for a given MBTI type
+    - the prompt-set version (for reproducibility and logging)
+- Provide machine-readable decision parsing helpers used by agent.py:
+    - extract the first JSON object from model output (brace balancing)
+    - parse and validate decision JSON with required keys ("action", "reason")
+- Define the Decision dataclass used for structured logging and debugging.
+
+Non-responsibilities:
+- Does NOT call language models directly.
+- Does NOT contain tournament or experiment orchestration logic.
+"""
+
 from __future__ import annotations
 
 import json

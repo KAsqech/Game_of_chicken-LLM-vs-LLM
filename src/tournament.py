@@ -1,4 +1,28 @@
 # src/tournament.py
+"""
+tournament.py
+
+Single-elimination tournament runner for the MBTI Game of Chicken project.
+
+Responsibilities:
+- Build one Agent per MBTI type (16 total), for a chosen conditioning method
+  (neutral, prompt, or lora).
+- Run a single-elimination bracket:
+    16 players -> 8 -> 4 -> 2 -> 1 champion
+  with reproducible randomized pairings based on a master seed.
+- For each match, construct proposal-aligned context features (e.g., dice rolls and
+  opponent last action) and obtain structured agent decisions via Agent.act_json().
+- Compute payoffs via chicken.py and determine winners (payoff >, then tie-breakers).
+- Write structured JSONL output including:
+    - meta record (parameters for reproducibility)
+    - champion records
+    - match records (actions, reasons, payoffs, round, seeds, formatting flags)
+
+Non-responsibilities:
+- Does NOT define the game payoff matrix (see chicken.py).
+- Does NOT implement statistical analysis (see analysis.py).
+"""
+
 from __future__ import annotations
 
 import json
