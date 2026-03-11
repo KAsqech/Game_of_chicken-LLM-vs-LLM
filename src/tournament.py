@@ -12,7 +12,10 @@ Responsibilities:
   with reproducible randomized pairings based on a master seed.
 - For each match, construct proposal-aligned context features (e.g., dice rolls and
   opponent last action) and obtain structured agent decisions via Agent.act_json().
-- Compute payoffs via chicken.py and determine winners (payoff >, then tie-breakers).
+- Compute payoffs via chicken.py and determine winners using Option 2 dice logic:
+    - higher Chicken payoff wins
+    - if payoffs tie, higher dice roll wins
+    - if both payoffs and dice tie, winner is chosen randomly
 - Write structured JSONL output including:
     - meta record (parameters for reproducibility)
     - champion records
@@ -66,7 +69,6 @@ class MatchResult:
 
 
 def _round_name(num_players: int) -> str:
-    # num_players is number of players entering the round
     if num_players == 16:
         return "R16"
     if num_players == 8:
@@ -85,6 +87,33 @@ def _stable_seed(master_seed: int, tournament_id: int, round_name: str, match_id
         acc ^= ord(ch)
         acc = (acc * 16777619) & 0xFFFFFFFF
     return acc
+
+
+def resolve_winner(
+    *,
+    payoff_a: int,
+    payoff_b: int,
+    dice_a: int,
+    dice_b: int,
+    rng: random.Random,
+) -> str:
+    """
+    Option 2 dice logic:
+    - Higher Chicken payoff wins
+    - If payoffs tie, higher dice roll wins
+    - If both payoffs and dice tie, choose randomly
+    """
+    if payoff_a > payoff_b:
+        return "A"
+    if payoff_b > payoff_a:
+        return "B"
+
+    if dice_a > dice_b:
+        return "A"
+    if dice_b > dice_a:
+        return "B"
+
+    return "A" if rng.random() < 0.5 else "B"
 
 
 def build_mbti_agents(
@@ -124,10 +153,10 @@ def play_match_one_shot(
     opp_last_action: Optional[Tuple[Optional[str], Optional[str]]] = None,
 ) -> MatchResult:
     """
-    One-shot Chicken match with proposal-style context:
-      - dice_self
-      - dice_opp
-      - opp_last_action
+    One-shot Chicken match with Option 2 dice logic:
+    - dice values are visible to both agents
+    - payoffs are computed from Chicken normally
+    - if payoffs tie, higher dice roll advances
     """
     seed = _stable_seed(master_seed, tournament_id, round_name, match_id)
     rng = random.Random(seed)
@@ -137,25 +166,29 @@ def play_match_one_shot(
 
     last_a, last_b = (None, None) if opp_last_action is None else opp_last_action
 
-    ctx_a: Dict = {"dice_self": dice_a, "dice_opp": dice_b, "opp_last_action": last_b}
-    ctx_b: Dict = {"dice_self": dice_b, "dice_opp": dice_a, "opp_last_action": last_a}
+    ctx_a: Dict = {
+        "dice_self": dice_a,
+        "dice_opp": dice_b,
+        "opp_last_action": last_b,
+    }
+    ctx_b: Dict = {
+        "dice_self": dice_b,
+        "dice_opp": dice_a,
+        "opp_last_action": last_a,
+    }
 
     decision_a = a.act_json(opponent=b.cfg, rng=rng, context=ctx_a)
     decision_b = b.act_json(opponent=a.cfg, rng=rng, context=ctx_b)
 
     pa, pb = payoff(decision_a.action, decision_b.action)
-    # Winner: higher payoff; tie broken by dice (then random)
-    if pa > pb:
-        winner = "A"
-    elif pb > pa:
-        winner = "B"
-    else:
-        if dice_a > dice_b:
-            winner = "A"
-        elif dice_b > dice_a:
-            winner = "B"
-        else:
-            winner = "A" if rng.random() < 0.5 else "B"
+
+    winner = resolve_winner(
+        payoff_a=pa,
+        payoff_b=pb,
+        dice_a=dice_a,
+        dice_b=dice_b,
+        rng=rng,
+    )
 
     return MatchResult(
         tournament_id=tournament_id,
@@ -200,7 +233,6 @@ def run_single_elimination(
         round_name = _round_name(len(entrants))
         next_round: List[Agent] = []
 
-        # Pair sequentially
         for i in range(0, len(entrants), 2):
             a = entrants[i]
             b = entrants[i + 1]
@@ -257,6 +289,7 @@ def write_tournament_jsonl(
             "n_tournaments": n_tournaments,
             "adapter_template": adapter_template,
             "num_agents": len(agents),
+            "dice_mode": "tie_break",
         }) + "\n")
 
         for tid in range(n_tournaments):
@@ -265,7 +298,7 @@ def write_tournament_jsonl(
                 agents=agents,
                 master_seed=master_seed,
             )
-            # champion record
+
             f.write(json.dumps({
                 "record_type": "champion",
                 "tournament_id": tid,
@@ -273,7 +306,6 @@ def write_tournament_jsonl(
                 "champion_method": champion.cfg.method,
             }) + "\n")
 
-            # match records
             for m in matches:
                 f.write(json.dumps({
                     "record_type": "match",

@@ -1,5 +1,4 @@
 # src/agent.py
-
 """
 agent.py
 
@@ -21,6 +20,7 @@ Non-responsibilities:
 - Does NOT orchestrate experiments or tournaments (see tournament.py / run_experiment.py).
 - Does NOT analyze results (see analysis.py).
 """
+
 from __future__ import annotations
 
 import os
@@ -67,8 +67,6 @@ class AgentConfig:
     adapter_model_name: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 80
-
-    # Step 1 persona prompt set path (used when method=="prompt")
     prompt_path: str = "prompts/mbti_prompts.json"
 
 
@@ -80,9 +78,6 @@ class Agent:
             )
         self.cfg = cfg
 
-    # -----------------------------
-    # Step 2: Machine-readable API
-    # -----------------------------
     def act_json(
         self,
         *,
@@ -96,7 +91,6 @@ class Agent:
         Enforces strict JSON output. If parsing fails, retries once with a
         correction instruction. If it still fails, uses a fallback action.
         """
-        # Optional fast test mode
         if os.getenv("DRY_RUN", "0") == "1":
             a = "ESCALATE" if rng.random() < 0.5 else "YIELD"
             return Decision(
@@ -127,7 +121,6 @@ class Agent:
 
         action, reason, ok = parse_decision_json(raw)
 
-        # Retry once with a format-only correction
         if not ok:
             correction = (
                 "FORMAT ERROR: Return ONLY valid JSON with keys action and reason.\n"
@@ -146,9 +139,14 @@ class Agent:
             raw = raw2
 
         if ok and action is not None and reason is not None:
-            return Decision(action=action, reason=reason, format_ok=True, raw_text=raw, used_fallback=False)
+            return Decision(
+                action=action,
+                reason=reason,
+                format_ok=True,
+                raw_text=raw,
+                used_fallback=False,
+            )
 
-        # Fallback (keep runs alive; mark clearly)
         fb = "ESCALATE" if rng.random() < 0.5 else "YIELD"
         return Decision(
             action=fb,
@@ -158,7 +156,6 @@ class Agent:
             used_fallback=True,
         )
 
-    # Backwards-compatible API used by your current runner
     def act(
         self,
         *,
@@ -169,16 +166,18 @@ class Agent:
         d = self.act_json(opponent=opponent, rng=rng, context=context)
         return d.action  # type: ignore[return-value]
 
-    # -----------------------------
-    # Updated prompt builder (Step 2)
-    # -----------------------------
     def _build_prompt(self, *, opponent: AgentConfig, context: Optional[Dict] = None) -> str:
         """
         Construct a prompt that enforces machine-readable JSON output:
           {"action":"ESCALATE"|"YIELD","reason":"<short sentence>"}
 
         Prompt-only agents receive a fixed MBTI persona template from
-        prompts/mbti_prompts.json (Step 1).
+        prompts/mbti_prompts.json.
+
+        Dice logic (Option 2):
+        - Dice are visible to both players as public contextual signals
+        - Dice do not directly change the Chicken payoff matrix
+        - If Chicken payoffs are tied, the higher dice roll wins the tie-break
         """
         persona = ""
         if self.cfg.method == "prompt":
@@ -186,7 +185,6 @@ class Agent:
             version = get_prompt_version(self.cfg.prompt_path)
             persona = f"{persona_text}\n(Prompt set version: {version})\n\n"
 
-        # Context (proposal-friendly)
         ctx_lines: List[str] = []
         if context:
             if "dice_self" in context:
@@ -204,18 +202,18 @@ class Agent:
             "You are playing a one-shot Game of Chicken.\n"
             "Choose exactly one action.\n"
             "Valid actions: ESCALATE or YIELD.\n\n"
+            "The dice values are public contextual signals visible to both players.\n"
+            "They do not directly change the Chicken payoff matrix.\n"
+            "However, if the Chicken payoffs are tied, the higher dice roll wins the tie-break.\n\n"
             "Return ONLY valid JSON with exactly two keys: action and reason.\n"
             "Do NOT output markdown or code fences.\n"
             "Examples:\n"
-            "{\"action\":\"ESCALATE\",\"reason\":\"I will pressure the opponent.\"}\n"
+            "{\"action\":\"ESCALATE\",\"reason\":\"I want to pressure the opponent.\"}\n"
             "{\"action\":\"YIELD\",\"reason\":\"Mutual escalation is too costly.\"}\n"
         )
 
         return persona + ctx_block + instructions
 
-    # -----------------------------
-    # Model call (unchanged)
-    # -----------------------------
     def _query_model(
         self,
         *,
