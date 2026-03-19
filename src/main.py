@@ -1,120 +1,104 @@
-# src/main.py
-"""
-main.py
-
-Command-line entry point for running MBTI Game of Chicken tournaments.
-
-This script parses CLI arguments (model backend, conditioning method, number of
-tournaments, random seed, output path, generation parameters) and dispatches
-execution to the tournament runner defined in tournament.py.
-
-Typical usage:
-- Dry run (no LLM calls):
-    DRY_RUN=1 python src/main.py --tournaments 1
-
-- Real run with local Ollama model:
-    python src/main.py --method prompt --model llama3:8b --tournaments 1
-
-Outputs:
-- Writes a JSONL file containing:
-    - one meta record
-    - one champion record per tournament
-    - one match record per match
-"""
-
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from tournament import write_tournament_jsonl
+from run_experiment import run_single_tournament
+from run_many_tournaments import run_many_tournaments
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="MBTI LLM tournament runner")
+    subparsers = parser.add_subparsers(dest="mode", required=True)
+
+    one_parser = subparsers.add_parser("run-one-tournament", help="Run one tournament")
+    one_parser.add_argument("--model", default="llama3:8b")
+    one_parser.add_argument("--method", default="prompt")
+    one_parser.add_argument("--temperature", type=float, default=0.7)
+    one_parser.add_argument("--max-tokens", type=int, default=80)
+    one_parser.add_argument("--seed", type=int, default=42)
+    one_parser.add_argument("--adapter-template", default=None)
+    one_parser.add_argument("--output", default="results/one_tournament.jsonl")
+
+    many_parser = subparsers.add_parser(
+        "run-many-tournaments",
+        help="Run many tournaments and aggregate results"
+    )
+    many_parser.add_argument("--model", default="llama3:8b")
+    many_parser.add_argument("--method", default="prompt")
+    many_parser.add_argument("--n-tournaments", type=int, default=10)
+    many_parser.add_argument("--temperature", type=float, default=0.7)
+    many_parser.add_argument("--max-tokens", type=int, default=80)
+    many_parser.add_argument("--seed", type=int, default=42)
+    many_parser.add_argument("--adapter-template", default=None)
+    many_parser.add_argument("--output", default="results/many_tournaments.jsonl")
+
+    return parser.parse_args()
+
+
+def write_jsonl(path: Path, record: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        import json
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run MBTI Game of Chicken single-elimination tournament(s)."
-    )
+    args = parse_args()
 
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="llama3:8b",
-        help="Model name to use (e.g., llama3:8b for Ollama).",
-    )
-    parser.add_argument(
-        "--method",
-        type=str,
-        default="prompt",
-        choices=["neutral", "prompt", "lora"],
-        help="Conditioning method to use for all 16 agents.",
-    )
-    parser.add_argument(
-        "--tournaments",
-        type=int,
-        default=1,
-        help="Number of tournaments to run.",
-    )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=42,
-        help="Master seed for reproducibility.",
-    )
-    parser.add_argument(
-        "--out",
-        type=str,
-        default="data/results/tournaments.jsonl",
-        help="Output JSONL path.",
-    )
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=0.7,
-        help="Generation temperature.",
-    )
-    parser.add_argument(
-        "--max_tokens",
-        type=int,
-        default=80,
-        help="Maximum number of tokens to generate per decision.",
-    )
-    parser.add_argument(
-        "--adapter_template",
-        type=str,
-        default=None,
-        help=(
-            "Optional template for LoRA-served model names. "
-            "Example: 'lora-{MBTI}' or 'llama3:8b-{mbti}'."
-        ),
-    )
+    if args.mode == "run-one-tournament":
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("", encoding="utf-8")
 
-    args = parser.parse_args()
+        meta = {
+            "record_type": "meta",
+            "master_seed": args.seed,
+            "method": args.method,
+            "model_name": args.model,
+            "temperature": args.temperature,
+            "max_tokens": args.max_tokens,
+            "n_tournaments": 1,
+            "adapter_template": args.adapter_template,
+            "num_agents": 16,
+            "dice_mode": "tie_break",
+        }
+        write_jsonl(output_path, meta)
 
-    out_path = Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+        result = run_single_tournament(
+            tournament_id=0,
+            seed=args.seed,
+            model_name=args.model,
+            method=args.method,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            adapter_template=args.adapter_template,
+        )
 
-    print("Running MBTI Game of Chicken tournament(s)...")
-    print(f"  model         : {args.model}")
-    print(f"  method        : {args.method}")
-    print(f"  tournaments   : {args.tournaments}")
-    print(f"  seed          : {args.seed}")
-    print(f"  output        : {out_path}")
-    print(f"  temperature   : {args.temperature}")
-    print(f"  max_tokens    : {args.max_tokens}")
-    print(f"  adapter_templ : {args.adapter_template}")
+        write_jsonl(output_path, {
+            "record_type": "champion",
+            "tournament_id": 0,
+            "champion_mbti": result["champion_mbti"],
+            "champion_method": result["champion_method"],
+        })
 
-    write_tournament_jsonl(
-        out_path=out_path,
-        master_seed=args.seed,
-        method=args.method,
-        model_name=args.model,
-        temperature=args.temperature,
-        max_tokens=args.max_tokens,
-        n_tournaments=args.tournaments,
-        adapter_template=args.adapter_template,
-    )
+        for rec in result["records"]:
+            write_jsonl(output_path, rec)
 
-    print("Tournament run complete.")
+        print(f"Champion: {result['champion_mbti']}")
+        print(f"Wrote results to {output_path}")
+
+    elif args.mode == "run-many-tournaments":
+        run_many_tournaments(
+            model_name=args.model,
+            method=args.method,
+            n_tournaments=args.n_tournaments,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            seed=args.seed,
+            adapter_template=args.adapter_template,
+            output_path=args.output,
+        )
 
 
 if __name__ == "__main__":
