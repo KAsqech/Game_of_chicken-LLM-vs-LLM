@@ -7,3 +7,5 @@ pyyaml
 langchain
 langgraph
 scipy
+langchain-google-genai
+langchain-google-vertexai
