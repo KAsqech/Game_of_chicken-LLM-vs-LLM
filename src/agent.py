@@ -199,18 +199,20 @@ class Agent:
             ctx_block = "Context:\n" + "\n".join(ctx_lines) + "\n\n"
 
         instructions = (
-            "You are playing a one-shot Game of Chicken.\n"
+            "You are playing a one-shot Game of Chicken against one opponent.\n"
+            "Each player simultaneously chooses to ESCALATE or YIELD.\n\n"
+            "Payoff matrix (your payoff, opponent payoff):\n"
+            "  You ESCALATE, opponent ESCALATES: (-10, -10)  ← worst outcome for both\n"
+            "  You ESCALATE, opponent YIELDS:    (+5,  -5)   ← you win, they lose\n"
+            "  You YIELD,    opponent ESCALATES: (-5,  +5)   ← you lose, they win\n"
+            "  You YIELD,    opponent YIELDS:    (0,   0)    ← stalemate\n\n"
             "Choose exactly one action.\n"
             "Valid actions: ESCALATE or YIELD.\n\n"
-            "The dice values are public contextual signals visible to both players.\n"
-            "They do not directly change the Chicken payoff matrix.\n"
-            "However, if the Chicken payoffs are tied, the higher dice roll wins the tie-break.\n\n"
             "Return ONLY valid JSON with exactly two keys: action and reason.\n"
             "Do NOT output markdown or code fences.\n"
             "Examples:\n"
             "{\"action\":\"ESCALATE\",\"reason\":\"I want to pressure the opponent.\"}\n"
-            "{\"action\":\"YIELD\",\"reason\":\"Mutual escalation is too costly.\"}\n"
-        )
+            "{\"action\":\"YIELD\",\"reason\":\"Mutual escalation is too costly.\"}\n")
 
         return persona + ctx_block + instructions
 
