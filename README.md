@@ -30,8 +30,11 @@ MBTI is used as a structured personality abstraction rather than a validated psy
 - Agents are prompted with MBTI persona descriptions via system prompts to guide their decision-making behavior
 - One-shot interactions with a fixed payoff matrix
 - Multiple tournament runs with randomized pairings for statistical significance
-- Neutral (no persona) agents as a baseline control
-- All decisions, reasoning traces, and metadata logged in structured format (JSON/SQLite)
+- Three experimental conditions:
+  - **true_persona** — each agent receives its own MBTI prompt
+  - **neutral** — every agent receives the same persona-free prompt (baseline control)
+  - **shuffled_persona** — each agent receives a different MBTI's prompt via a derangement (control to test whether effects come from persona content vs. prompt structure)
+- All decisions, reasoning traces, and metadata logged as JSONL
 
 ## Evaluation
 
@@ -43,6 +46,7 @@ MBTI is used as a structured personality abstraction rather than a validated psy
 
 ## Stretch Goals
 
+- **Local Llama 3 8B via Ollama** — Port the experiment off the Gemini API onto a locally-hosted Llama 3 8B using Ollama, both to remove API dependencies and to enable the LoRA fine-tuning path below.
 - **LoRA fine-tuning** — If time allows, we plan to fine-tune separate LoRA/QLoRA adapters on Llama 3 8B for each MBTI type using personality-consistent text data (e.g., Kaggle MBTI dataset) and [Unsloth](https://github.com/unslothai/unsloth) for efficient training on Google Colab. This would enable a comparison between personality injected through prompting vs. personality internalized through fine-tuning.
 - **Prisoner's Dilemma** — Implementing a second game to test whether personality-driven behavioral patterns generalize across different strategic environments.
 
@@ -50,24 +54,36 @@ MBTI is used as a structured personality abstraction rather than a validated psy
 
 ```
 src/
-  agent.py              # LLM agent with observe-think-act loop
-  chicken.py            # Game of Chicken engine
-  tournament.py         # Tournament orchestration and bracket logic
-  evaluation.py         # Role-play fidelity metrics and payoff analysis
-  analysis.py           # Statistical analysis and visualization
-  main.py               # Entry point
+  main.py                    # CLI entry point (run-many-tournaments, run-all-conditions)
+  agent.py                   # LLM agent with observe-think-act loop
+  llm.py                     # LangGraph-based LLM wrapper (Gemini via langchain-google-genai)
+  model_adapter.py           # Model backend adapter
+  chicken.py                 # Game of Chicken engine and payoff logic
+  tournament.py              # Single-elimination tournament orchestration
+  mbti_conditions.py         # Condition resolution (true_persona / neutral / shuffled_persona)
+  run_experiment.py          # Single-tournament runner
+  run_many_tournaments.py    # Multi-tournament driver for statistical runs
+  analysis.py                # Statistical analysis helpers
+  analyze_results.py         # CLI: summarize a results.jsonl file
+  check_results.py           # Sanity checks on logged results
+  utils.py                   # Shared utilities
 
 config/
-  mbti_profiles.yaml    # MBTI trait definitions and expected behaviors
-  payoff_matrix.yaml    # Payoff matrices
-  model_config.yaml     # Model parameters (temperature, tokens, etc.)
+  mbti_profiles.yaml         # MBTI trait definitions and expected behaviors
+  payoff_matrix.yaml         # Chicken payoff matrix
+  tournament.yaml            # Tournament/model parameters (seed, runs, temperature)
 
 prompts/
-  mbti_prompts/         # 16 persona prompt templates
+  INTJ.txt ... ESFP.txt      # 16 MBTI persona prompt templates
+  neutral.txt                # Persona-free baseline prompt
+  mbti_prompts.json          # Structured persona prompt bundle (v2.0)
+  mbti_prompts.py            # Loader helpers for persona prompts
+  game_prompts.py            # Game instruction / decision-request prompts
 
 data/
-  results/              # Experiment logs (JSON/SQLite)
-  analysis/             # Derived statistics and visualizations
+  results/                   # Experiment logs (JSONL)
+  results*.jsonl             # Per-condition run outputs
+  results*_meta.json         # Run metadata
 ```
 
 ## Setup
@@ -80,6 +96,24 @@ cd Game_of_chicken-LLM-vs-LLM
 # Install dependencies
 pip install -r requirements.txt
 
-# Pull the base model
-ollama pull llama3:8b
+# Configure the Gemini API key (primary backend: gemini-2.5-flash-lite)
+echo "GEMINI_API_KEY=your_key_here" > .env
+```
+
+## Running Experiments
+
+```bash
+# Run one condition across many tournaments
+python src/main.py run-many-tournaments \
+    --n-tournaments 10 \
+    --condition true_persona \
+    --output results_true.jsonl
+
+# Run all three conditions (true_persona, neutral, shuffled_persona)
+python src/main.py run-all-conditions \
+    --n-tournaments 10 \
+    --output results_all.jsonl
+
+# Summarize a results file
+python src/analyze_results.py results_true.jsonl
 ```
