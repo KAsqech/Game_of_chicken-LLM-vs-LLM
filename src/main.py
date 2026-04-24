@@ -4,35 +4,41 @@ CLI entrypoint for the MBTI tournament project.
 Commands:
 - run-many-tournaments
 - run-all-conditions
+- summarize
 
 Examples:
     python src/main.py run-many-tournaments \
         --n-tournaments 10 \
-        --condition true_persona \
-        --output results_true.jsonl
+        --condition true_persona
 
-    python src/main.py run-many-tournaments \
-        --n-tournaments 10 \
-        --condition neutral \
-        --output results_neutral.jsonl
+    python src/main.py run-all-conditions --n-tournaments 10
 
-    python src/main.py run-many-tournaments \
-        --n-tournaments 10 \
-        --condition shuffled_persona \
-        --output results_shuffled.jsonl
-
-    python src/main.py run-all-conditions \
-        --n-tournaments 10 \
-        --output results_all.jsonl
+    python src/main.py summarize data/results/true_persona_20260424-131200.jsonl
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
+from collections import Counter
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+from cli_utils import (
+    default_output_path,
+    fail,
+    format_champion_table,
+    ok,
+    progress_line,
+    validate_setup,
+    warn,
+)
 from mbti_conditions import VALID_CONDITIONS
 from run_many_tournaments import run_all_conditions, run_many_tournaments
+
+
+DEFAULT_RESULTS_DIR = Path("data/results")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,7 +47,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--n-tournaments", type=int, default=1)
-    common.add_argument("--output", type=Path, required=True)
+    common.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help=f"Output JSONL path. Defaults to {DEFAULT_RESULTS_DIR}/<label>_<timestamp>.jsonl",
+    )
     common.add_argument("--model-name", type=str, default="llama3:8b")
     common.add_argument("--temperature", type=float, default=0.7)
     common.add_argument("--max-tokens", type=int, default=80)
@@ -57,6 +68,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Optional adapter template name/path used by your model wrapper.",
+    )
+    common.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate environment and prompts, then exit without running the tournament.",
     )
 
     p_many = subparsers.add_parser(
@@ -85,23 +101,66 @@ def build_parser() -> argparse.ArgumentParser:
         help="List of conditions to run.",
     )
 
+    p_summarize = subparsers.add_parser(
+        "summarize",
+        help="Summarize a results JSONL file (wraps analyze_results).",
+    )
+    p_summarize.add_argument("results", type=Path, help="Path to a results JSONL file.")
+
     return parser
 
 
-def print_counter(counter) -> None:
-    print("Champion counts:")
-    for key, value in sorted(counter.items(), key=lambda x: str(x[0])):
-        print(f"  {key}: {value}")
+def resolve_output_path(output: Path | None, label: str) -> Path:
+    if output is not None:
+        return output
+    DEFAULT_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    return default_output_path(DEFAULT_RESULTS_DIR, label)
+
+
+def preflight(prompts_dir: Path) -> bool:
+    problems = validate_setup(prompts_dir)
+    if problems:
+        print(fail("Preflight checks failed:"), file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        return False
+    print(ok("Preflight checks passed (API key + prompt files)."))
+    return True
+
+
+def make_progress_printer(total_for_condition: int):
+    def _cb(current: int, total: int, condition: str, champion: str) -> None:
+        line = progress_line(current, total_for_condition, condition, champion)
+        print(line)
+
+    return _cb
 
 
 def main() -> None:
+    load_dotenv(override=True)
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.command == "summarize":
+        import analyze_results
+
+        sys.argv = ["analyze_results.py", str(args.results)]
+        analyze_results.main()
+        return
+
+    if not preflight(args.prompts_dir):
+        sys.exit(1)
+
+    if args.dry_run:
+        print(warn("Dry-run: skipping tournament execution."))
+        return
+
     if args.command == "run-many-tournaments":
+        output_path = resolve_output_path(args.output, args.condition)
+        print(ok(f"Writing results to {output_path}"))
         counts = run_many_tournaments(
             n_tournaments=args.n_tournaments,
-            output_path=args.output,
+            output_path=output_path,
             model_name=args.model_name,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
@@ -109,15 +168,18 @@ def main() -> None:
             prompts_dir=args.prompts_dir,
             condition=args.condition,
             adapter_template=args.adapter_template,
+            on_tournament_complete=make_progress_printer(args.n_tournaments),
         )
-        print(f"Wrote results to {args.output}")
-        print_counter(counts)
+        print()
+        print(format_champion_table(counts, title="=== Champion Counts ==="))
         return
 
     if args.command == "run-all-conditions":
+        output_path = resolve_output_path(args.output, "all_conditions")
+        print(ok(f"Writing results to {output_path}"))
         counts = run_all_conditions(
             n_tournaments=args.n_tournaments,
-            output_path=args.output,
+            output_path=output_path,
             model_name=args.model_name,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
@@ -125,9 +187,10 @@ def main() -> None:
             prompts_dir=args.prompts_dir,
             conditions=args.conditions,
             adapter_template=args.adapter_template,
+            on_tournament_complete=make_progress_printer(args.n_tournaments),
         )
-        print(f"Wrote results to {args.output}")
-        print_counter(counts)
+        print()
+        print(format_champion_table(counts, title="=== Champion Counts by Condition ==="))
         return
 
     raise ValueError(f"Unknown command: {args.command}")

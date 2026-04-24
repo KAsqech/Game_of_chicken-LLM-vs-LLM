@@ -19,7 +19,7 @@ import random
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from mbti_conditions import (
     MBTI_TYPES,
@@ -237,6 +237,9 @@ def run_single_tournament(
     return champion.agent_mbti
 
 
+ProgressCallback = Callable[[int, int, str, str], None]
+
+
 def run_many_tournaments(
     *,
     n_tournaments: int,
@@ -248,6 +251,7 @@ def run_many_tournaments(
     prompts_dir: Path,
     condition: str,
     adapter_template: Optional[str] = None,
+    on_tournament_complete: Optional[ProgressCallback] = None,
 ) -> Counter:
     validate_condition(condition)
 
@@ -269,6 +273,11 @@ def run_many_tournaments(
             )
             champion_counts[champion_mbti] += 1
 
+            if on_tournament_complete is not None:
+                on_tournament_complete(
+                    tournament_id + 1, n_tournaments, condition, champion_mbti
+                )
+
     return champion_counts
 
 
@@ -283,6 +292,7 @@ def run_all_conditions(
     prompts_dir: Path,
     conditions: list[str],
     adapter_template: Optional[str] = None,
+    on_tournament_complete: Optional[ProgressCallback] = None,
 ) -> Counter:
     for condition in conditions:
         validate_condition(condition)
@@ -305,5 +315,10 @@ def run_all_conditions(
                     adapter_template=adapter_template,
                 )
                 overall_counts[(condition, champion_mbti)] += 1
+
+                if on_tournament_complete is not None:
+                    on_tournament_complete(
+                        tournament_id + 1, n_tournaments, condition, champion_mbti
+                    )
 
     return overall_counts

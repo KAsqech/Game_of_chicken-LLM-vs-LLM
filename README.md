@@ -103,17 +103,22 @@ echo "GEMINI_API_KEY=your_key_here" > .env
 ## Running Experiments
 
 ```bash
+# Validate setup (API key + prompt files) without running
+python src/main.py run-many-tournaments --n-tournaments 10 --dry-run
+
 # Run one condition across many tournaments
+# (--output is optional; defaults to data/results/<condition>_<timestamp>.jsonl)
 python src/main.py run-many-tournaments \
     --n-tournaments 10 \
-    --condition true_persona \
-    --output results_true.jsonl
+    --condition true_persona
 
 # Run all three conditions (true_persona, neutral, shuffled_persona)
-python src/main.py run-all-conditions \
-    --n-tournaments 10 \
-    --output results_all.jsonl
+python src/main.py run-all-conditions --n-tournaments 10
 
 # Summarize a results file
-python src/analyze_results.py results_true.jsonl
+python src/main.py summarize data/results/true_persona_<timestamp>.jsonl
 ```
+
+The CLI performs preflight checks on startup (missing `GEMINI_API_KEY`, missing
+prompt files) and prints per-tournament progress with a ranked champion table
+at the end. Set `NO_COLOR=1` to disable ANSI colors.
