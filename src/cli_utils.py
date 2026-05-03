@@ -1,11 +1,7 @@
 """
 cli_utils.py
 
-Shared helpers for the CLI experience:
-- Environment / setup validation
-- ANSI coloring (auto-disabled when stdout is not a TTY)
-- Formatted summary tables
-- Default output path generation
+Shared helpers for the CLI experience
 """
 
 from __future__ import annotations

@@ -106,6 +106,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Summarize a results JSONL file (wraps analyze_results).",
     )
     p_summarize.add_argument("results", type=Path, help="Path to a results JSONL file.")
+    p_summarize.add_argument(
+        "--plots",
+        action="store_true",
+        help="Also save report figures next to the results file under data/analysis/<basename>/",
+    )
+    p_summarize.add_argument(
+        "--plots-dir",
+        type=Path,
+        default=None,
+        help="Override the output directory for figures. Defaults to data/analysis/<results basename>/",
+    )
 
     return parser
 
@@ -146,6 +157,18 @@ def main() -> None:
 
         sys.argv = ["analyze_results.py", str(args.results)]
         analyze_results.main()
+
+        if args.plots:
+            import plots as plots_mod
+
+            output_dir = args.plots_dir or (
+                Path("data/analysis") / args.results.stem
+            )
+            generated = plots_mod.make_all_plots(args.results, output_dir)
+            print()
+            print(ok(f"Wrote {len(generated)} figure(s) to {output_dir}"))
+            for p in generated:
+                print(f"  {p}")
         return
 
     if not preflight(args.prompts_dir):

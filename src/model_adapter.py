@@ -1,28 +1,31 @@
 """
 model_adapter.py
 
-Single place to connect model inference to the tournament runner.
+Connects model inference to the tournament runner.
 
 Behavior:
 - If GEMINI_API_KEY is set, calls Gemini via google-genai and parses the
   response into a normalized action.
 - If the key is missing or the SDK call fails, falls back to a deterministic
-  mock so the pipeline can still run for smoke tests. A warning is printed
-  once so this never goes unnoticed.
+  mock so the pipeline can still run for smoke tests (BUT warning is printed
+  once so this isnt unnoticed)
 
-The mock can also be forced explicitly via MOCK_MODEL=1, which is useful for
-unit tests and offline development.
+The mock can be forced explicitly via MOCK_MODEL=1 
 """
 
 from __future__ import annotations
 
+import json
 import os
 import random
 import sys
-from typing import Optional
+from typing import Optional, Tuple
+
+from utils import _strip_code_fences, extract_first_json_object
 
 
 VALID_ACTIONS = {"YIELD", "DRIVE", "SWERVE", "STRAIGHT"}
+ACTION_ALIASES = {"ESCALATE": "DRIVE", "STRAIGHT": "DRIVE", "SWERVE": "YIELD"}
 
 _GEMINI_CLIENT = None  # lazily initialized
 _GEMINI_INIT_FAILED = False
@@ -91,9 +94,39 @@ def extract_action(raw_text: str) -> str:
 
     for action in VALID_ACTIONS:
         if action in text:
-            return action
+            return ACTION_ALIASES.get(action, action)
 
     return "YIELD"
+
+
+def parse_reasoned_response(raw_text: str) -> Tuple[str, Optional[str], bool]:
+    """
+    Try to parse the model's response as {"action": ..., "reason": ...}.
+
+    Returns (action, reason, parsed_json_ok).
+    - If JSON parses cleanly with a valid action, returns (action, reason, True).
+    - If JSON fails or action is invalid, falls back to substring extraction
+      and returns (action, None, False).
+    """
+    if not raw_text:
+        return "YIELD", None, False
+
+    cleaned = _strip_code_fences(raw_text)
+    js = extract_first_json_object(cleaned)
+
+    if js is not None:
+        try:
+            obj = json.loads(js)
+            raw_action = str(obj.get("action", "")).upper().strip()
+            action = ACTION_ALIASES.get(raw_action, raw_action)
+            reason = str(obj.get("reason", "")).strip() or None
+            if action in {"DRIVE", "YIELD"}:
+                return action, reason, True
+        except Exception:
+            pass
+
+    # Fallback: substring scan, no reason captured.
+    return extract_action(raw_text), None, False
 
 
 def build_game_prompt(
@@ -114,20 +147,22 @@ Game context:
 - DRIVE means escalate / hold course. YIELD means back down / swerve.
 - Mutual DRIVE is the worst outcome. Unilateral DRIVE wins.
 
-Choose exactly one action from:
-YIELD
-DRIVE
+Choose exactly one action from: YIELD or DRIVE.
 
-Return only the chosen action as a single word, with no punctuation or explanation.
+Respond with a single JSON object on one line, with no surrounding text or
+code fences, in exactly this shape:
+{{"action": "DRIVE", "reason": "<one short sentence explaining your choice in character>"}}
+
+The "action" field must be either "DRIVE" or "YIELD". Keep "reason" under 25 words.
 """
 
 
-def _mock_action(full_prompt: str, seed: int, temperature: float) -> str:
-    """Deterministic-ish smoke-test fallback."""
+def _mock_action(full_prompt: str, seed: int, temperature: float) -> Tuple[str, Optional[str]]:
+    """Deterministic-ish smoke-test fallback. Returns (action, reason=None)."""
     rng = random.Random(seed)
     score = sum(ord(c) for c in full_prompt[:300]) + seed + int(temperature * 100)
     raw = "YIELD" if (score + rng.randint(0, 9)) % 2 == 0 else "DRIVE"
-    return extract_action(raw)
+    return extract_action(raw), None
 
 
 def _gemini_action(
@@ -138,10 +173,10 @@ def _gemini_action(
     temperature: float,
     max_tokens: int,
     seed: int,
-) -> Optional[str]:
+) -> Optional[Tuple[str, Optional[str]]]:
     """
-    Call Gemini once. Returns the normalized action, or None on failure
-    (so the caller can fall back to the mock).
+    Call Gemini once. Returns (action, reason) on success, or None on failure
+    so the caller can fall back to the mock.
     """
     try:
         from google.genai import types
@@ -159,7 +194,8 @@ def _gemini_action(
             config=config,
         )
         text = getattr(response, "text", None) or ""
-        return extract_action(text)
+        action, reason, _ = parse_reasoned_response(text)
+        return action, reason
     except Exception as exc:
         global _GEMINI_INIT_FAILED
         msg = str(exc)
@@ -183,10 +219,15 @@ def generate_action(
     temperature: float,
     max_tokens: int,
     adapter_template: Optional[str] = None,
-) -> str:
+) -> Tuple[str, Optional[str]]:
     """
     Main model hook used by the tournament runner.
-    Returns a normalized action string ('DRIVE' or 'YIELD').
+
+    Returns (action, reason) where:
+      - action is a normalized action string ('DRIVE' or 'YIELD')
+      - reason is the model's stated reasoning (str) or None when the model
+        did not return a parseable JSON response (e.g. mock fallback or
+        free-form output that failed JSON parsing)
     """
     full_prompt = build_game_prompt(
         persona_prompt=persona_prompt,
@@ -206,7 +247,7 @@ def generate_action(
         _warn_fallback_once("GEMINI_API_KEY missing or SDK unavailable")
         return _mock_action(full_prompt, seed, temperature)
 
-    action = _gemini_action(
+    result = _gemini_action(
         client=client,
         model_name=model_name,
         full_prompt=full_prompt,
@@ -214,7 +255,7 @@ def generate_action(
         max_tokens=max_tokens,
         seed=seed,
     )
-    if action is None:
+    if result is None:
         _warn_fallback_once("Gemini call failed at runtime")
         return _mock_action(full_prompt, seed, temperature)
-    return action
+    return result

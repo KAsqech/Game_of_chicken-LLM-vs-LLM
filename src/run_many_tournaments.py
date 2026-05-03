@@ -161,7 +161,7 @@ def run_single_tournament(
             prev_opp_last_action_a = opponent_last_actions.get(a.agent_mbti)
             prev_opp_last_action_b = opponent_last_actions.get(b.agent_mbti)
 
-            a_action = generate_action(
+            a_action, a_reason = generate_action(
                 model_name=model_name,
                 persona_prompt=a.prompt_text,
                 opponent_last_action=prev_opp_last_action_a,
@@ -171,7 +171,7 @@ def run_single_tournament(
                 adapter_template=adapter_template,
             )
 
-            b_action = generate_action(
+            b_action, b_reason = generate_action(
                 model_name=model_name,
                 persona_prompt=b.prompt_text,
                 opponent_last_action=prev_opp_last_action_b,
@@ -209,6 +209,8 @@ def run_single_tournament(
                     "opp_last_action_b": prev_opp_last_action_b,
                     "action_a": a_action,
                     "action_b": b_action,
+                    "reason_a": a_reason,
+                    "reason_b": b_reason,
                     "winner": winner.agent_mbti,
                 },
             )

@@ -2,7 +2,7 @@
 """
 agent.py
 
-Implements the LLM “Agent” used in the Game of Chicken project.
+Implements the LLM “Agent” used in project
 
 Responsibilities:
 - Define AgentConfig (conditioning method, MBTI type, model parameters, optional adapter).
@@ -12,13 +12,11 @@ Responsibilities:
     {"action": "ESCALATE"|"YIELD", "reason": "<short sentence>"}
   using a robust parse + one retry on formatting errors.
 - Provide two action APIs:
-    - act_json(...): returns a structured Decision object (action, reason, parse status, raw text).
-    - act(...): backwards-compatible wrapper returning only "ESCALATE" or "YIELD".
+    - act_json(...): returns Decision object (action, reason, parse status, raw text).
+    - act(...)
 
-Non-responsibilities:
-- Does NOT implement game mechanics (see chicken.py).
-- Does NOT orchestrate experiments or tournaments (see tournament.py / run_experiment.py).
-- Does NOT analyze results (see analysis.py).
+chicken.py does game mechanics
+This file also does not orchestrate experiments or tournaments (see tournament.py / run_experiment.py).
 """
 
 from __future__ import annotations

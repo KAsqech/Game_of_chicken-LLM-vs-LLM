@@ -1,9 +1,9 @@
 """
 run_experiment.py
 
-Core single-tournament simulation logic for the MBTI LLM project.
+Core single-tournament simulation logic
 
-This module defines how one complete tournament is executed. A tournament consists
+Defines how one complete tournament is executed. A tournament consists
 of a fixed set of agents (typically the 16 MBTI personality types) arranged in a
 single-elimination bracket. Each round pairs agents into matches, and winners
 advance until a final champion is determined.
