@@ -196,14 +196,23 @@ def _mock_action(full_prompt: str, seed: int, temperature: float) -> Tuple[str, 
     return extract_action(raw), None
 
 
-# Shorter backoffs: per-minute Gemini quota resets every 60s, so a single
-# 60s sleep almost always recovers. Worst case is 30+60=90s per call.
-_RETRY_BACKOFFS = (30.0, 60.0)
-_RATE_LIMIT_TOKENS = ("RESOURCE_EXHAUSTED", "429")
+# Backoffs for transient server-side errors. 429 (rate limit) usually recovers
+# in 30-60s; 503 (overloaded) can take a couple minutes. We try four times.
+_RETRY_BACKOFFS = (15.0, 30.0, 60.0, 120.0)
+_RETRYABLE_TOKENS = (
+    "RESOURCE_EXHAUSTED",  # 429 quota
+    "429",
+    "UNAVAILABLE",          # 503 server overloaded
+    "503",
+    "DEADLINE_EXCEEDED",    # 504 timeout
+    "504",
+    "INTERNAL",             # 500 server error
+    "500",
+)
 
 
-def _is_rate_limit_error(msg: str) -> bool:
-    return any(token in msg for token in _RATE_LIMIT_TOKENS)
+def _is_retryable_error(msg: str) -> bool:
+    return any(token in msg for token in _RETRYABLE_TOKENS)
 
 
 def _gemini_action(
@@ -258,19 +267,19 @@ def _gemini_action(
             msg = str(exc)
             head = msg.splitlines()[0][:200]
 
-            if _is_rate_limit_error(msg) and attempt < len(_RETRY_BACKOFFS):
+            if _is_retryable_error(msg) and attempt < len(_RETRY_BACKOFFS):
                 wait = _RETRY_BACKOFFS[attempt]
                 attempt += 1
                 if head not in _SEEN_ERRORS:
                     _SEEN_ERRORS.add(head)
                     print(
-                        f"[model_adapter] Rate limit hit ({head}). "
+                        f"[model_adapter] Transient Gemini error ({head}). "
                         f"Backing off {wait:.0f}s and retrying.",
                         file=sys.stderr,
                     )
                 else:
                     print(
-                        f"[model_adapter] Rate limit hit again, retry {attempt}, "
+                        f"[model_adapter] Transient error again, retry {attempt}, "
                         f"sleeping {wait:.0f}s.",
                         file=sys.stderr,
                     )
