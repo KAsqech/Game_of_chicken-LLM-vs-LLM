@@ -54,19 +54,17 @@ MBTI is used as a structured personality abstraction rather than a validated psy
 
 ```
 src/
-  main.py                    # CLI entry point (run-many-tournaments, run-all-conditions)
-  agent.py                   # LLM agent with observe-think-act loop
-  llm.py                     # LangGraph-based LLM wrapper (Gemini via langchain-google-genai)
-  model_adapter.py           # Model backend adapter
+  main.py                    # CLI entry point (run-many-tournaments, run-all-conditions, summarize)
+  cli_utils.py               # Preflight checks, ANSI colors, summary table formatting
+  model_adapter.py           # Gemini call wrapper with mock fallback
   chicken.py                 # Game of Chicken engine and payoff logic
-  tournament.py              # Single-elimination tournament orchestration
   mbti_conditions.py         # Condition resolution (true_persona / neutral / shuffled_persona)
-  run_experiment.py          # Single-tournament runner
-  run_many_tournaments.py    # Multi-tournament driver for statistical runs
+  run_many_tournaments.py    # Tournament orchestration and multi-run driver
+  analyze_results.py         # Quantitative analysis (chi-square, variance, dimensions)
+  plots.py                   # matplotlib report figures
   analysis.py                # Statistical analysis helpers
-  analyze_results.py         # CLI: summarize a results.jsonl file
   check_results.py           # Sanity checks on logged results
-  utils.py                   # Shared utilities
+  utils.py                   # Shared utilities (JSON parsing, prompt loading)
 
 config/
   mbti_profiles.yaml         # MBTI trait definitions and expected behaviors
@@ -133,5 +131,4 @@ MOCK_MODEL=1 python src/main.py run-many-tournaments --n-tournaments 2
 ```
 
 The model adapter prints a clear warning whenever it falls back to the mock
-(missing key, auth failure, etc.) so mock results are never silently mistaken
-for real ones.
+(missing key, auth failure, etc.) so mock results are never mistaken for real ones.
