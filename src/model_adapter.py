@@ -66,9 +66,6 @@ def _throttle() -> None:
 
 
 def _normalize_gemini_model(model_name: str) -> str:
-    """
-    Accepts either a Gemini model name or a non-Gemini name. Returns a valid Gemini model id.
-    """
     if not model_name or not model_name.lower().startswith(("gemini", "models/gemini")):
         return "gemini-2.5-flash-lite"
     if model_name.startswith("models/"):
@@ -196,8 +193,7 @@ def _mock_action(full_prompt: str, seed: int, temperature: float) -> Tuple[str, 
     return extract_action(raw), None
 
 
-# Backoffs for transient server-side errors. 429 (rate limit) usually recovers
-# in 30-60s; 503 (overloaded) can take a couple minutes. We try four times.
+# Backoffs for transient server-side errors. We try four times.
 _RETRY_BACKOFFS = (15.0, 30.0, 60.0, 120.0)
 _RETRYABLE_TOKENS = (
     "RESOURCE_EXHAUSTED",  # 429 quota
@@ -244,11 +240,22 @@ def _gemini_action(
 
     # Gemini's seed field is INT32; the tournament uses UINT32 seeds.
     clamped_seed = seed % (2**31 - 1)
-    config = types.GenerateContentConfig(
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-        seed=clamped_seed,
-    )
+
+    # Gemini 2.5 models default to a hidden "thinking" budget that consumes
+    # max_output_tokens internally before producing any visible text, which
+    # truncates short JSON responses. Disable thinking when the SDK supports
+    # it; older SDKs / non-2.5 models silently ignore the parameter.
+    config_kwargs = {
+        "temperature": temperature,
+        "max_output_tokens": max_tokens,
+        "seed": clamped_seed,
+    }
+    try:
+        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
+    except (AttributeError, TypeError):
+        pass
+
+    config = types.GenerateContentConfig(**config_kwargs)
     resolved_model = _normalize_gemini_model(model_name)
 
     attempt = 0
@@ -286,7 +293,7 @@ def _gemini_action(
                 time.sleep(wait)
                 continue
 
-            # Non-rate-limit error, or retries exhausted.
+            # Non-rate-limit error, or retries exhausted
             if head not in _SEEN_ERRORS:
                 _SEEN_ERRORS.add(head)
                 print(f"[model_adapter] Gemini call failed: {head}", file=sys.stderr)
