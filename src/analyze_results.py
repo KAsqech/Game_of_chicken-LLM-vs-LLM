@@ -163,7 +163,6 @@ def chi_square_2x2(a: int, b: int, c: int, d: int) -> Tuple[float, float, int]:
         if expected > 0:
             chi2 += (observed - expected) ** 2 / expected
 
-    # Survival function of chi-square with df=1 is 2*(1 - Phi(sqrt(chi2)))
     p = math.erfc(math.sqrt(chi2 / 2.0))
     return chi2, p, 1
 
@@ -290,7 +289,7 @@ def section_dimension_breakdown(by_condition: Dict[str, List[dict]]) -> str:
     lines = ["=== MBTI Dimension Breakdown (DRIVE rate & win rate) ==="]
     lines.append("")
     lines.append("For each MBTI dimension we group the 16 agents into the two sides")
-    lines.append("(e.g. E vs I) and aggregate every action they took and every match")
+    lines.append("(like E vs I) and aggregate every action they took and every match")
     lines.append("they played, by condition.")
 
     for condition in sorted(by_condition):
